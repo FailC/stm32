@@ -72,7 +72,6 @@ bool ENC_BUTTON_State = false;
 
 int frequency = 0;
 //int* const frequency_ptr= &frequency;
-
 // ^ dont need to use pointers
 
 
@@ -119,42 +118,41 @@ uint8_t u8x8_byte_STM32_hw_i2c(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 
 
 // set values for PWM
-void user_pwm_setvalue(uint16_t encoder_value, bool *encoder_button_state)
+void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 {
 
-	const uint16_t bit16 = 65535;
 	static uint16_t ARR = 0;
 	static uint16_t CCR1 = 0;
 	const float max_value = 500.0;
-	uint16_t ARR_test = 0;
-	uint16_t CCR1_test = 0;
+
 
 	// limit range of encoder value
 	if (encoder_value > 500) encoder_value = 500;
 	if (encoder_value < 0) encoder_value = 0;
 
 	// set pulse width
-	if (*encoder_button_state == true){
+	if (encoder_button_state == true){
 	  // set register to limit the reload value, > here between 0 and 100%
 	  TIM1 -> ARR = 100;
 
 	  // scale the encoder value to the 16bit register of the PWM
-	  CCR1 = (encoder_value / 100.0) * bit16;
+	  CCR1 = (encoder_value / 100.0) * 0xFFFF;
 	  // CCR1 = (encoder_value / 100.0) * TIM2 -> ARR;
 
 	  // set pulse width register with calculated value
 	 TIM2 -> CCR1 = CCR1;
 
 	 // update duty cycle!
-	 ARR_test = CCR1 / encoder_value;
-
+	 ARR = (encoder_value / max_value) * CCR1;
+	 TIM2 -> ARR = ARR;
 	}
 	// set frequency
 	else{
 		//__HAL_TIM_SET_COMPARE()
 
 	  TIM1 -> ARR = 500;
-	  ARR = (encoder_value / max_value) * bit16;
+	  //ARR = (encoder_value / max_value) * bit16;
+	  ARR = (encoder_value / max_value) * CCR1;
 	  TIM2 -> ARR = ARR;
 	  frequency = encoder_value;
 	}

@@ -125,7 +125,7 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 	//const uint16_t bit16 = 65535;
 	static uint16_t ARR = 0;
 	static uint16_t CCR1 = 0;
-	const float max_value = 600.0;
+	const float max_value = 500.0;
 	static uint16_t old_value = 0;
 
 	if (encoder_button_state == true){
@@ -146,13 +146,9 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 	  TIM1 -> ARR = 100;
 
 	  // scale the encoder value to the 16bit register of the PWM
-	  //TIM2 -> CCR1 = ((encoder_value / 100) * TIM2 -> ARR) ;
 	  TIM2 -> CCR1 = (encoder_value / 100.0) * TIM2 -> ARR;
-	  //    p = (pulse / 100) * freq
-	 //ARR = ((encoder_value / max_value) * CCR1) -1;
-	 //TIM2 -> ARR = ARR;
-
 	}
+
 	// set frequency
 	else{
 		//__HAL_TIM_SET_COMPARE()
@@ -312,13 +308,9 @@ int main(void)
 	  HAL_UART_Transmit(&huart1, (uint8_t*)textBuffer, strlen(textBuffer), 0xffff);
 
 
-	  // add a Start stop function to start the loading of the conductor
-	  //   HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
-	  //   need a 1k resistor for the push button
+	  TIM2 -> ARR = (float)0xffff;
 
-	  TIM2 -> ARR = (float)0xFFFF;
-
-	  TIM2 -> CCR1 = (float)0xFFFF / 2;
+	  TIM2 -> CCR1 = (float)0xffff / 2;
 	  // busy wait
 	  HAL_Delay(100);
 

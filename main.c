@@ -68,12 +68,9 @@ static void MX_TIM2_Init(void);
 
 // global variables to
 bool ENC_BUTTON_State = false;
-//bool* const ptr_ENC_BUTTON_State = &ENC_BUTTON_State;
 
 int frequency = 0;
-//int* const frequency_ptr= &frequency;
-// ^ dont need to use pointers
-
+uint16_t pulse = 0;
 
 // ----- SSD1306 I2C OLED Display ---------------------------------------------
 const uint8_t SSD1306_I2C_ADDRESS = 0x3c;
@@ -121,49 +118,34 @@ uint8_t u8x8_byte_STM32_hw_i2c(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 {
 
-	 HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
-	//const uint16_t bit16 = 65535;
 	static uint16_t ARR = 0;
-	static uint16_t CCR1 = 0;
-	const float max_value = 500.0;
-	static uint16_t old_value = 0;
+	uint16_t CCR1 = 0;
+	TIM1 -> ARR = 100; // counter register encoder, limit 0 to 100
 
-	if (encoder_button_state == true){
-		TIM1 -> ARR = 100;
-		old_value = encoder_value;
-	}
-
-
-	// limit range of encoder value
-	if (encoder_value > max_value) encoder_value = max_value;
-	if (encoder_value < 0) encoder_value = 0;
+	HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
 
 	// set pulse width
 	if (encoder_button_state == true){
-
-
-	  // set register to limit the reload value, > here between 0 and 100%
-	  TIM1 -> ARR = 100;
-
-	  // scale the encoder value to the 16bit register of the PWM
-	  TIM2 -> CCR1 = (encoder_value / 100.0) * TIM2 -> ARR;
+		CCR1 = encoder_value * (ARR / 100);
+		TIM2 -> CCR1 = CCR1;
+		pulse = encoder_value;
 	}
 
 	// set frequency
 	else{
 		//__HAL_TIM_SET_COMPARE()
-
-	  TIM1 -> ARR = max_value;
-	  TIM2 -> ARR = (encoder_value / max_value) * 0xFFFF;
-	  frequency = encoder_value;
-
+		ARR = 0xffff - (encoder_value * (0xffff - 5000) / 100);
+		TIM2 -> ARR = ARR;
+		frequency = encoder_value + 15;
 	  //update duty cycle
-	  //TIM2 -> CCR1 = ((encoder_value/ 500.0) * TIM2 -> ARR);
+		TIM2 -> CCR1 = pulse * (ARR / 100);
 
 	}
 
-	 HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 }
+
+
 
 
 // Interrupt to toggle the state to change either the frequency or the pulse width
@@ -171,7 +153,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
 	if (GPIO_Pin == ENC_BUTTON_INT_Pin){
 		ENC_BUTTON_State = !ENC_BUTTON_State;
-
 		return;
 	}
 }
@@ -233,7 +214,6 @@ int main(void)
   char textBuffer[24];
   uint16_t encoder_value = 0;
 
-  double dutycycle = 0;
   uint16_t old_encoder_value = 0;
 
   // start PWM Timer 2
@@ -261,17 +241,17 @@ int main(void)
   {
 
 	  // read in encoder
+	  TIM1 -> ARR = 100;
 	  encoder_value = __HAL_TIM_GET_COUNTER(&htim1);
 
 	  // call function only if the value changed
 	  if (encoder_value != old_encoder_value){
 		  user_pwm_setvalue(encoder_value, ENC_BUTTON_State);
 		  //update old_encoder_value
-		  old_encoder_value = encoder_value;
+		  //old_encoder_value = encoder_value;
 		  //calculate Dutycycle, from 0 to 100 %
 		  //dutycycle = (TIM2 -> CCR1 / 65535.0) * 100;
-		  dutycycle =  (TIM2 -> CCR1 / TIM2 -> ARR); // ?
-
+		  //dutycycle =  (double) (TIM2 -> CCR1 / TIM2 -> ARR);
 	  }
 
 
@@ -294,11 +274,11 @@ int main(void)
 
 	  // draw pulse width
 	  if (ENC_BUTTON_State == true){
-		  sprintf(textBuffer, "!pulse: %d %%", (uint) dutycycle);  // uint dutycicle
+		  sprintf(textBuffer, "!pulse: %d %%",  pulse);  // uint dutycicle
 		  //sprintf(textBuffer, "!pulse: %d %%", TIM2 -> CCR1);  // uint dutycicle
 	  }
 	  else{
-		  sprintf(textBuffer, " pulse: %d %%", (uint) dutycycle);
+		  sprintf(textBuffer, " pulse: %d %%", pulse);
 		  //sprintf(textBuffer, " pulse: %d %%", TIM2 -> CCR1);
 	  }
 	  u8g2_DrawStr(display, 4, 56, textBuffer);
@@ -308,9 +288,8 @@ int main(void)
 	  HAL_UART_Transmit(&huart1, (uint8_t*)textBuffer, strlen(textBuffer), 0xffff);
 
 
-	  TIM2 -> ARR = (float)0xffff;
-
-	  TIM2 -> CCR1 = (float)0xffff / 2;
+	  //TIM2 -> ARR = (int) 0x9c40 ; // 8Mz
+	  //TIM2 -> CCR1 = (int)0x9c40 / 2;
 	  // busy wait
 	  HAL_Delay(100);
 
@@ -461,9 +440,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 8-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 65536 -1;
+  htim2.Init.Period = 40000 -1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)

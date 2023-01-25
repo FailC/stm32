@@ -68,9 +68,13 @@ static void MX_TIM2_Init(void);
 
 // global variables to
 bool ENC_BUTTON_State = false;
+//bool* const ptr_ENC_BUTTON_State = &ENC_BUTTON_State;
 
 int frequency = 0;
 uint16_t pulse = 0;
+//int* const frequency_ptr= &frequency;
+// ^ dont need to use pointers
+
 
 // ----- SSD1306 I2C OLED Display ---------------------------------------------
 const uint8_t SSD1306_I2C_ADDRESS = 0x3c;
@@ -127,7 +131,7 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 	// set pulse width
 	if (encoder_button_state == true){
 		CCR1 = encoder_value * (ARR / 100);
-		TIM2 -> CCR1 = CCR1;
+		TIM2 -> CCR1 = CCR1 +1;
 		pulse = encoder_value;
 	}
 
@@ -135,11 +139,10 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 	else{
 		//__HAL_TIM_SET_COMPARE()
 		ARR = 0xffff - (encoder_value * (0xffff - 5000) / 100);
-		TIM2 -> ARR = ARR;
-		frequency = encoder_value + 15;
-	  //update duty cycle
-		TIM2 -> CCR1 = pulse * (ARR / 100);
-
+		TIM2 -> ARR = ARR +1;
+		frequency = 1000000 / TIM2 -> ARR;
+	  //update duty cycle after frequncy changed
+		TIM2 -> CCR1 = pulse * (ARR / 100) +1;
 	}
 
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);

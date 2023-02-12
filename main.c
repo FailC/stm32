@@ -130,19 +130,22 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 
 	// set pulse width
 	if (encoder_button_state == true){
-		CCR1 = encoder_value * (ARR / 100);
+		TIM1->ARR = 0xffff;
+		//CCR1 = encoder_value * (ARR / 100);
+		CCR1 = encoder_value;
 		TIM2 -> CCR1 = CCR1 +1;
-		pulse = encoder_value;
+		//pulse = encoder_value;
 	}
 
 	// set frequency
 	else{
+		TIM1->ARR = 100;
 		//__HAL_TIM_SET_COMPARE()
 		ARR = 0xffff - (encoder_value * (0xffff - 5000) / 100);
 		TIM2 -> ARR = ARR +1;
-		frequency = 1000000 / TIM2 -> ARR;
+		frequency = 1000000 / ARR; //?
 	  //update duty cycle after frequncy changed
-		TIM2 -> CCR1 = pulse * (ARR / 100) +1;
+		//TIM2 -> CCR1 = pulse * (ARR / 100) +1;
 	}
 
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
@@ -154,7 +157,7 @@ void user_pwm_setvalue(uint16_t encoder_value, bool encoder_button_state)
 // Interrupt to toggle the state to change either the frequency or the pulse width
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
-	if (GPIO_Pin == ENC_BUTTON_INT_Pin){
+	if (GPIO_Pin == ENC_BUTTON_INT_Pin){		// if?
 		ENC_BUTTON_State = !ENC_BUTTON_State;
 		return;
 	}
@@ -214,13 +217,14 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  TIM1 -> ARR = 100;
   char textBuffer[24];
   uint16_t encoder_value = 0;
 
   uint16_t old_encoder_value = 0;
 
   // start PWM Timer 2
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  //HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 
   // set up start screen:
   u8g2_ClearBuffer(display);
@@ -244,18 +248,14 @@ int main(void)
   {
 
 	  // read in encoder
-	  TIM1 -> ARR = 100;
 	  encoder_value = __HAL_TIM_GET_COUNTER(&htim1);
 
 	  // call function only if the value changed
 	  if (encoder_value != old_encoder_value){
 		  user_pwm_setvalue(encoder_value, ENC_BUTTON_State);
-		  //update old_encoder_value
-		  //old_encoder_value = encoder_value;
-		  //calculate Dutycycle, from 0 to 100 %
-		  //dutycycle = (TIM2 -> CCR1 / 65535.0) * 100;
-		  //dutycycle =  (double) (TIM2 -> CCR1 / TIM2 -> ARR);
 	  }
+
+	  //if (ButtonSwitchPWM_Pin)
 
 
 	  u8g2_ClearBuffer(display);
@@ -277,12 +277,12 @@ int main(void)
 
 	  // draw pulse width
 	  if (ENC_BUTTON_State == true){
-		  sprintf(textBuffer, "!pulse: %d %%",  pulse);  // uint dutycicle
-		  //sprintf(textBuffer, "!pulse: %d %%", TIM2 -> CCR1);  // uint dutycicle
+		  //sprintf(textBuffer, "!pulse: %d %%",  pulse);  // uint dutycicle
+		  sprintf(textBuffer, "!pulse: %d", (int)TIM2 -> CCR1);  // uint dutycicle
 	  }
 	  else{
-		  sprintf(textBuffer, " pulse: %d %%", pulse);
-		  //sprintf(textBuffer, " pulse: %d %%", TIM2 -> CCR1);
+		  //sprintf(textBuffer, " pulse: %d %%", pulse);
+		  sprintf(textBuffer, " pulse: %d", (int)TIM2 -> CCR1);
 	  }
 	  u8g2_DrawStr(display, 4, 56, textBuffer);
 
@@ -290,11 +290,12 @@ int main(void)
 	  u8g2_SendBuffer(display);
 	  HAL_UART_Transmit(&huart1, (uint8_t*)textBuffer, strlen(textBuffer), 0xffff);
 
+	  // testing for low duty cycle:
+	  //TIM2 -> ARR = 0x7fff ; // prescaler = 10, freq = 25
+	  //TIM2 -> CCR1 = 3;	   // duty
 
-	  //TIM2 -> ARR = (int) 0x9c40 ; // 8Mz
-	  //TIM2 -> CCR1 = (int)0x9c40 / 2;
 	  // busy wait
-	  HAL_Delay(100);
+	  //HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -443,7 +444,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 8-1;
+  htim2.Init.Prescaler = 8-1;   // 10-1
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 40000 -1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -527,8 +528,8 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
@@ -539,6 +540,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : ButtonSwitchPWM_Pin */
+  GPIO_InitStruct.Pin = ButtonSwitchPWM_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(ButtonSwitchPWM_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ENC_BUTTON_Pin */
   GPIO_InitStruct.Pin = ENC_BUTTON_Pin;
